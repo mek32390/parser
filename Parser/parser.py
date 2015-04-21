@@ -6,7 +6,7 @@ Usage:  parser.py -d [/HtmlDirectoryPath]^+ [/CsvDumpDirectory]
 Extracts selected data from html files and writes it to csv files
 """
 import sys, os.path, datetime
-sys.path.append(sys.path[0] + '/Parser')
+sys.path.append(os.path.join(sys.path[0] + '/Parser'))
 from Parser.fileParser import parse, can_parse, setup_parser, clean_env, NonexistantKeyError, UnparseableFileError, UnsetFileParserError
 
 #True if script is Main
@@ -23,7 +23,8 @@ currentKeywords = DEFAULT_KEYWORDS
 
 
 VERBOSE = False
-Log = 'logger.txt'
+Logger  = 'Logger.txt'
+ErrorLog= 'Errors.txt'
 CsvDump = 'Csv_Dump'
 
 
@@ -129,11 +130,13 @@ Extracts a dicitonary mapping keywords to parsed data
 @return: A list of Entries
 """
 def getEntries(f):
+    global _error
     try:
         entries = parse()
         return entries
     except UnparseableFileError as e:
         _error = 'No schema available to parse ' + f.name
+        raise e
 
 """
 Appends all new entries to the designated .csv file. If file does
@@ -182,10 +185,11 @@ def createCSVFile(entries, CSVfilename):
     global _error, CsvDump
 
     filename = ''
-    if not os.path.isdir(sys.path[0] + '/' + CsvDump):
-        os.makedirs(CsvDump)
+    if not os.path.isdir(os.path.join(sys.path[0], CsvDump)):
+        os.makedirs(os.path.join(sys.path[0], CsvDump))
+    filepath = os.path.join(sys.path[0], CsvDump)
+    
 
-    filename += CsvDump + '/'
     try:
         if CSVfilename is None:
             if len(entries) > 0:
@@ -195,17 +199,18 @@ def createCSVFile(entries, CSVfilename):
                 if len(filename) > 0:
                     filename += '_'
         else:
-            filename += CSVfilename
+#            filepath = os.path.join(filepath, CSVfilename)
+            filename = CSVfilename           
     except KeyError as e:
         _error = 'FILENAME_BASE must be listed as a keyword'
         raise e
-    if CSVfilename is None:    
-        filename += 'class_list.csv'
-    
+    filepath = os.path.join(filepath, filename)
+
     if CSVfilename is not None:
-        return open(filename, 'a+')
+        return open(filepath, 'a+')
     else:
-        return open(filename, 'w+')
+        filepath += 'class_list.csv'
+        return open(filepath, 'w+')
 
 """
 Seperates the given file names into lists of html, csv,
@@ -280,7 +285,6 @@ def handleFlags(argv):
                 if not os.path.isdir(argv[i+1]):
                     _error = 'Csv dump is not a directory'
                     raise BadInputError()
-            print("-c flag caught")
             set_csv_dump(argv[i+1])
             argv.pop(i)
             argv.pop(i)
@@ -291,17 +295,43 @@ def handleFlags(argv):
                 _error = 'Log should not be set twice'
                 raise BadInputError()
             elif i == (len(argv) - 1):
-                _error = 'No log file name given'
-                raise BadInputError()
-            elif os.path.exists(argv[i+1]):
+                Logger = None
+#                _error = 'No log file name given'
+#                raise BadInputError()
+            elif argv[i+1].split('.')[len(argv)-1] == 'txt':
                 if not os.path.isfile(argv[i+1]):
                     _error = 'Log is not a file'
                     raise BadInputError()
-            set_error_log(argv[i+1])
-            argv.pop(i)
+                else:
+                    set_error_log(argv[i+1])
+                    argv.pop(i)
+            else:
+                Logger = None
             argv.pop(i)
             removed = True
             l_flag = True
+        """Sets error log
+         elif argv[i] == '-e':
+            if l_flag:
+                _error = 'Log should not be set twice'
+                raise BadInputError()
+            elif i == (len(argv) - 1):
+                Logger = None
+#                _error = 'No log file name given'
+#                raise BadInputError()
+            elif argv[i+1].split('.')[len(argv)-1] == 'txt':
+                if not os.path.isfile(argv[i+1]):
+                    _error = 'Log is not a file'
+                    raise BadInputError()
+                else:
+                    set_error_log(argv[i+1])
+                    argv.pop(i)
+            else:
+                Logger = None
+            argv.pop(i)
+            removed = True
+            l_flag = True
+        """
         elif argv[i] == '-d':
             if d_flag:
                 _error = 'Directory parsing mode should not be set twice'
@@ -345,13 +375,11 @@ the parser places all parsed .csv files into.
 def set_csv_dump(directory):
     global CsvDump
     
+    if not os.path.isabs(directory):
+        directory = os.path.abspath(directory)
     CsvDump = directory
-    if not os.path.isdir(sys.path[0] + '/' + CsvDump):
-        print("making: " + sys.path[0] + '/' + CsvDump)
-        os.makedirs(sys.path[0] + '/' + CsvDump)
-    else:
-        print("Not making dump")
-    
+    if not os.path.isdir(os.path.join(sys.path[0], CsvDump)):
+        os.makedirs(os.path.join(sys.path[0], CsvDump))    
     
 """
 Parses the files and writes them to csv files
@@ -360,15 +388,19 @@ Parses the files and writes them to csv files
 def parse_and_write(htmlFile, CsvFile=None):       
     try:
         opened = setup(htmlFile)
+        entries = getEntries(opened)
+        if entries is None:
+            clean_env()
+            return False
+        else:
+            writeCSV(entries, CsvFile)
+            clean_env()
+            return True
+        
     except Exception as e:
-        print(e)
-    entries = getEntries(opened)
-    if entries is None:
-        return False
-    else:
-        writeCSV(entries, CsvFile)
-    clean_env()
-    return True
+        clean_env()
+        raise e
+
 
 """
 Parses files given by the command line. Arguments are validated
@@ -387,7 +419,7 @@ def parseCommandLine(argv):
     logFile     = None
 
     if len(fileTypes['other']) > 0:
-        verbLog = sys.path[0] + CsvDump + '/' + fileTypes['other'][0]
+        verbLog = os.path.join(sys.path[0], CsvDump, fileTypes['other'][0])
 
     if verbLog is not None:
         if os.path.isfile(verbLog):        
@@ -410,7 +442,8 @@ def parseDirectories(argv):
     checkParseDirectoriesArgs(argv)
     directories = getFileTypes(argv)['other']
     for d in directories:
-        parse_directory(d)
+        parse_directory(os.path.abspath(d))
+
         
 def parse_directory(directory, logFile=None):
     files = os.listdir(directory)
@@ -419,7 +452,7 @@ def parse_directory(directory, logFile=None):
     i = 1
     for f in htmlfiles:
         try:
-            parse_and_write(sys.path[0]+'/'+directory+'/'+f)
+            parse_and_write(os.path.join(sys.path[0], directory, f))
             message = str(i) + ': Parsed ' + f
             addMessage(message, logFile)
         except Exception as e:
@@ -438,9 +471,8 @@ def parse_files(htmlfiles, csvfiles=[], logFile=None):
     for f in htmlfiles:
         try:
             if len(csvfiles) > i:
-                parsed = parse_and_write(f, csvfile[i])
+                parsed = parse_and_write(f, csvfiles[i])
             else:
-#                print(f)
                 parsed = parse_and_write(f)
             if not parsed:
                 i += 1

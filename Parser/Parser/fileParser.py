@@ -62,7 +62,6 @@ with an appropriate schema.
 def can_parse(setter=True):
     global schema
     if len(keywords) == 0 or soup is None:
-        print("0 length")
         return False
     s = findSchema()
     if s is None:
@@ -96,8 +95,7 @@ def findSchema():
                     hits += 1
         except Exception as e:
             hits = 0
-#For debugging, errors can be raised            
-            if RAISE_ERRORS:
+            if RAISE_ERRORS:#For debugging, errors can be raised
                 raise e
         if hits > bestHits:
             bestHits = hits
@@ -107,7 +105,6 @@ def findSchema():
     if mySchema is not None:
         return getattr(sch, mySchema)()
     else:
-        print("No schema for file:", filename)
         return None
 
 """

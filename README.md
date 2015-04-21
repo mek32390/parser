@@ -9,12 +9,19 @@ Below is a description of the script usage:
 
 Flags: 
     -v toggles verbose mode
+    
     -l [file.txt] sets a logger file to store
+    
         verbose messages
+        
     -c [directory] Sets parser to dump csv files
+    
         into the specified directory
+        
     -d [directories[]] Sets parser to search for html files
+    
         in the specified directories.
+        
 
 Usage: python3 parser.py [arguments[.html|.csv|.txt]]
 

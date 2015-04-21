@@ -310,28 +310,6 @@ def handleFlags(argv):
             argv.pop(i)
             removed = True
             l_flag = True
-        """Sets error log
-         elif argv[i] == '-e':
-            if l_flag:
-                _error = 'Log should not be set twice'
-                raise BadInputError()
-            elif i == (len(argv) - 1):
-                Logger = None
-#                _error = 'No log file name given'
-#                raise BadInputError()
-            elif argv[i+1].split('.')[len(argv)-1] == 'txt':
-                if not os.path.isfile(argv[i+1]):
-                    _error = 'Log is not a file'
-                    raise BadInputError()
-                else:
-                    set_error_log(argv[i+1])
-                    argv.pop(i)
-            else:
-                Logger = None
-            argv.pop(i)
-            removed = True
-            l_flag = True
-        """
         elif argv[i] == '-d':
             if d_flag:
                 _error = 'Directory parsing mode should not be set twice'

@@ -90,8 +90,6 @@ def getSchemaDefinitions():
             else:
                 if i == (SCHEMA_DEF + DEBUG):
                     schemas.append(i)
-
-
     return schemas
 
 """
@@ -107,15 +105,28 @@ def validateSchemas():
                 return False
     return True
 
-
-def createSchema(functions):
+def createSchema(functions, ancestor=None):
     schemaDefs = {}
 
     for k in keywords:
         funcName = ('_'+ k)
         if funcName in functions.keys():
             schemaDefs[k] = functions[funcName]
+        elif ancestor is not None:
+            if ancestor.rules[k] is not None:
+                schemaDefs[k] = ancestor.rules[k]
     return Schema(schemaDefs)
+
+def getSchemaCreator(locs, ancestor=None):
+    def schemaMaker():
+        functions = {}
+        for f in locs:
+            if str.find(f, '_') != -1:
+                functions[f] = locs[f]
+        schema = createSchema(functions, ancestor)
+        return schema
+    return schemaMaker
+    
 
 ###########################################
 #############Schema Definitions############
@@ -125,10 +136,9 @@ def createSchema(functions):
 #implement, and then return the schema created by the
 #createSchema() functioned defined above.
 """
-Defines the schema used to parse the Math131 and PSY-7-W15 class lists
+Defines the schema used to parse varients of the Moodle CMS
 """
-def SchemaDefinition_1():
-    functions = {}
+def SchemaDefinition_MoodleVarient():
     schema = None
 
     def _validation(soup):
@@ -139,17 +149,16 @@ def SchemaDefinition_1():
         else:
             return True
         
-
     def test1(soup):
         v = soup.find('option', {'value':'1','selected':'selected'})
-        if v.text == 'User details':
+        if v.text.strip('\n\t ') == 'User details':
             return True
         else:
             return False
 
     def test2(soup):
         v = soup.find('option', {'value':'5','selected':'selected'})
-        if v.text == 'Student':
+        if v.text.strip('\t\n ') == 'Student':
             return True
         else:
             return False
@@ -212,23 +221,14 @@ def SchemaDefinition_1():
                 return words[0]
         schema.lookup[key] = None
         return None
-    
-    locs = locals()
-    for f in locs:
-        if str.find(f, '_') != -1:
-            functions[f] = locs[f]
-
-    schema = createSchema(functions)
+    schema = getSchemaCreator(locals())()
     return schema
-
 ######
 """
-Defines the schema used to parse the FST-102 class list
+Defines the schema used to parse Syracuse's varient of the 
+BlackBoard CMS
 """
-def SchemaDefinition_2():
-    schema    = None
-    functions = {}
-    
+def SchemaDefinition_SyracuseBlackBoard():    
     def _validation(soup):
         if not test1(soup):
             return False
@@ -236,11 +236,10 @@ def SchemaDefinition_2():
             return True
 
     def test1(soup):
-        if soup.find('title').text == 'Select Users':
+        if soup.find('title').text.strip('\t\n ') == 'Select Users':
             return True
         else:
             return False
-
 ##
     def _contents(soup):
         return soup.find_all('option')
@@ -292,30 +291,21 @@ def SchemaDefinition_2():
             return words[0]
         else:
             return ''
-
-    locs = locals()
-    for f in locs:
-        if str.find(f, '_') != -1:
-            functions[f] = locs[f]
-    schema = createSchema(functions)
+    schema = getSchemaCreator(locals())()
     return schema
+
 ######
 """
-Defines the schema used to parse the COMM-318-SP15-001 class
+Defines the schema used to parse the University of Arizona's
+varient of the D2L CMS.
 """
-def SchemaDefinition_3():
-    schema    = None
-    functions = {}
-    
+def SchemaDefinition_UofAD2L():   
     def _validation(soup):
         return True
 ##
     def _contents(soup):
         block = soup.find('table', {'class': 'd_g d_gl', 'id': 'z_i'})
         contents = block.find_all('tr')
-#        for c in contents:
-#            print(c.prettify())
-#        print('length: ', len(contents))
         contents.pop(0)
         contents.pop(0)
         return contents
@@ -341,7 +331,6 @@ def SchemaDefinition_3():
     def _last(block):
         name = block.find('th', {'class': 'd_ich', 'scope': 'row'})
         return getLast(name)
-
 
     def getLast(soup):
         if soup is None:
@@ -401,16 +390,73 @@ def SchemaDefinition_3():
                         pass
         schema.lookup[key] = None
         return None
-    
-    locs = locals()
-    for f in locs:
-        if str.find(f, '_') != -1:
-            functions[f] = locs[f]
-    schema = createSchema(functions)
-    return schema
-
 ##
+    def _role(block):
+        children = block.find_all('label')
+        for c in children:
+            if len(c.text.split('@')) == 1:
+                return c.text
 
+    schema = getSchemaCreator(locals())()
+    return schema
+##
+"""
+Defines the schema used to parse the University of Arizona's
+varient of the Blackboard CMS.
+"""
+def SchemaDefinition_UofABlackBoard():
+    schema = SchemaDefinition_SyracuseBlackBoard()
+    def _validation(soup):
+        if not test1(soup):
+            return False
+        return True
+    
+    def test1(soup):
+        tag = soup.find('title').text.strip('\t\n ')
+        if tag == 'Select Users – Basic Operations Mgmt (Spring - 2015)':
+            return True
+        else:
+            return False
+##    
+    def _contents(soup):
+        block = soup.find('select', {'id': 'USERS_AVAIL'})
+        return block.find_all('option')
+##    
+    def _first(block):
+        name = block.text
+        return getFirst(name)
+
+    def getFirst(name):
+        firstAndMid = name.split(',')[1]
+        first = firstAndMid.split()[0]
+        return first.strip('\t\n ')
+##
+    def _course(block):
+        key = 'course'
+        if key in schema.lookup.keys():
+            return schema.lookup[key]
+
+        for parent in block.parents:
+            if parent is not None:
+                if parent.name == 'html':
+                    title = parent.find('title')
+                    break
+        if title is not None:
+            words = title.text.split()
+            i = len(words) - 6
+            course = ''
+            while i < (len(words) - 3):
+                course += words[i]
+                if i != (len(words) - 4):
+                    course+= '-'
+                i += 1
+            schema.lookup[key] = course
+            return course
+        schema.lookup[key] = None
+        return None        
+##
+    schema = getSchemaCreator(locals(), schema)()
+    return schema
 
 class BadSchemaError(Exception):
     pass
@@ -419,8 +465,22 @@ class BadSchemaError(Exception):
 if not validateSchemas():
     raise BadSchemaError()
 
+#from bs4 import BeautifulSoup
+
 def __main__():
     pass
+#    soup = BeautifulSoup(open(sys.argv[1]))
+#    schema = SchemaDefinition_UofABlackBoard()
+#    contents = schema.rules['contents'](soup)
+#    print(contents)
+#    print(len(contents))
+#    for c in contents:
+#        course = schema.get_rules()['course'](c)
+#        first = schema.get_rules()['first'](c)
+#        last = schema.get_rules()['last'](c)
+#        print(first," ", last, " ", course)
+#    print(schema.get_rules()['course'](contents[0]))
+#    print(schema.get_rules()['validation'])
 
 if __name__ == '__main__':
     __main__()

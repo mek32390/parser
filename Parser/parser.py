@@ -18,15 +18,39 @@ _error = ''
 #None, the file will be names "class_list.csv".
 FILENAME_BASE = 'course'   
 
-DEFAULT_KEYWORDS = ['first', 'email', 'last', 'course', 'instructor']
+PARSED_KEYWORDS = ['first', 'email', 'last', 'course', 'instructor', 'role']
+DEFAULT_KEYWORDS = ['first', 'email', 'last', 'course', 'instructor', 'role']
 currentKeywords = DEFAULT_KEYWORDS
-
-
+#Used to determine if an entry should be place in the CSV file.
+#If a mapping <keywork>: [<value>,..] exists, then only entries where <keywork> map
+#to <value> in the list will be allowed. 
+#If a mapping <~keywork>: [<value>,..] exists, then only entries where <keywork> does
+#not map to <value> in the list will be allowed. 
+ENTRY_RESTRICTIONS ={
+                    '~role': ['Instructor'],
+#                       'role': None,
+#                     'role': 'Student',
+                    }
 VERBOSE = False
 Logger  = 'Logger.txt'
 ErrorLog= 'Errors.txt'
 CsvDump = 'Csv_Dump'
 
+
+"""
+Checks for any restrictions
+"""
+def restricted(entry):
+    for k in entry.keys():
+        if k in ENTRY_RESTRICTIONS.keys():
+            for v in ENTRY_RESTRICTIONS[k]:
+                if entry[k] != v:
+                    return True
+        if ('~' + k) in ENTRY_RESTRICTIONS.keys():
+            for v in ENTRY_RESTRICTIONS[('~' + k)]:
+                if entry[k] == v:
+                    return True
+    return False
 
 """
 Checks for errors in the command line for a script
@@ -114,7 +138,7 @@ def setup(f):
     global _error
     try:
         opened = open(f)
-        setup_parser(currentKeywords, opened)
+        setup_parser(PARSED_KEYWORDS, opened)
         return opened
     except NonexistantKeyError as e:
         _error = 'The selected keys cannot be parsed'
@@ -164,6 +188,8 @@ def writeCSV(entries, CSVfilename = None):
     
     if entries is not None:
         for e in entries:
+            if restricted(e):
+                continue
             i = 0
             newEntry = ''
             for k in currentKeywords:

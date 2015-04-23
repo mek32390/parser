@@ -19,7 +19,7 @@ _error = ''
 FILENAME_BASE = 'course'   
 
 PARSED_KEYWORDS = ['first', 'email', 'last', 'course', 'instructor', 'role']
-DEFAULT_KEYWORDS = ['first', 'email', 'last', 'course', 'instructor', 'role']
+DEFAULT_KEYWORDS = ['first', 'email', 'last', 'course', 'instructor']
 currentKeywords = DEFAULT_KEYWORDS
 #Used to determine if an entry should be place in the CSV file.
 #If a mapping <keywork>: [<value>,..] exists, then only entries where <keywork> map
@@ -27,9 +27,9 @@ currentKeywords = DEFAULT_KEYWORDS
 #If a mapping <~keywork>: [<value>,..] exists, then only entries where <keywork> does
 #not map to <value> in the list will be allowed. 
 ENTRY_RESTRICTIONS ={
-                    '~role': ['Instructor'],
-#                       'role': None,
-#                     'role': 'Student',
+#                    '~role': ['Instructor'],
+#                       'role': [None],
+                     'role': ['Student'],
                     }
 VERBOSE = False
 Logger  = 'Logger.txt'

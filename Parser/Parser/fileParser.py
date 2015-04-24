@@ -91,8 +91,12 @@ def findSchema():
             hits += 1
             if len(contents) > 0:
                 for k in keywords:
-                    data = extractData(k, contents[0])
-                    hits += 1
+                    try:
+                        data = extractData(k, contents[0])
+                        hits += 1
+                    except Exception as e:
+                        pass
+        #Ignore schema if validation/contents don't work
         except Exception as e:
             hits = 0
             if RAISE_ERRORS:#For debugging, errors can be raised
@@ -142,9 +146,11 @@ the data.
 """
 def extractData(key, block):
     global schema
-
+    
+    data = None
     rules = schema.get_rules()
     if rules[key] is not None:
+        #figure something out
         data = rules[key](block)
         if safeToExtract(data):
             if isinstance(data, str):

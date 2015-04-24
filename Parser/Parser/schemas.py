@@ -127,7 +127,8 @@ def getSchemaCreator(locs, ancestor=None):
         return schema
     return schemaMaker
     
-
+##FIX ERROR CHECKING HERE -------------------------------------------
+##
 ###########################################
 #############Schema Definitions############
 ###########################################
@@ -465,20 +466,22 @@ class BadSchemaError(Exception):
 if not validateSchemas():
     raise BadSchemaError()
 
-#from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup
 
 def __main__():
     pass
-#    soup = BeautifulSoup(open(sys.argv[1]))
-#    schema = SchemaDefinition_UofABlackBoard()
-#    contents = schema.rules['contents'](soup)
+    soup = BeautifulSoup(open(sys.argv[1]))
+    schema = SchemaDefinition_MoodleVarient()
+#    print(schema.rules['validation'](soup))
+    contents = schema.rules['contents'](soup)
 #    print(contents)
-#    print(len(contents))
-#    for c in contents:
-#        course = schema.get_rules()['course'](c)
-#        first = schema.get_rules()['first'](c)
-#        last = schema.get_rules()['last'](c)
-#        print(first," ", last, " ", course)
+    print(len(contents))
+    for c in contents:
+        course = schema.get_rules()['course'](c)
+        first = schema.get_rules()['first'](c)
+        last = schema.get_rules()['last'](c)
+        email = schema.get_rules()['email'](c)
+        print(first," ", last, " ", course)
 #    print(schema.get_rules()['course'](contents[0]))
 #    print(schema.get_rules()['validation'])
 

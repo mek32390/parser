@@ -29,7 +29,7 @@ currentKeywords = DEFAULT_KEYWORDS
 ENTRY_RESTRICTIONS ={
 #                    '~role': ['Instructor'],
 #                       'role': [None],
-                     'role': ['Student'],
+                     'role': ['Student', None],
                     }
 VERBOSE = False
 Logger  = 'Logger.txt'
@@ -41,16 +41,22 @@ CsvDump = 'Csv_Dump'
 Checks for any restrictions
 """
 def restricted(entry):
+    restricted = False
+
     for k in entry.keys():
+        #Allowed values
         if k in ENTRY_RESTRICTIONS.keys():
+            restricted = True
             for v in ENTRY_RESTRICTIONS[k]:
-                if entry[k] != v:
-                    return True
+                if entry[k] == v:
+                    restricted = False
+                    break
+        #Restricted Values
         if ('~' + k) in ENTRY_RESTRICTIONS.keys():
             for v in ENTRY_RESTRICTIONS[('~' + k)]:
                 if entry[k] == v:
-                    return True
-    return False
+                    restricted = True
+    return restricted
 
 """
 Checks for errors in the command line for a script
@@ -225,7 +231,6 @@ def createCSVFile(entries, CSVfilename):
                 if len(filename) > 0:
                     filename += '_'
         else:
-#            filepath = os.path.join(filepath, CSVfilename)
             filename = CSVfilename           
     except KeyError as e:
         _error = 'FILENAME_BASE must be listed as a keyword'
@@ -284,6 +289,10 @@ become the first element of argv.
 """
 def handleFlags(argv):
     global _error
+    
+    if len(argv) < 1:
+        _error = 'No command line arguments'
+        raise BadInputError()
 
     v_flag = False
     l_flag = False
@@ -356,7 +365,6 @@ Toggles the parser's verbose setting
 def toggle_verbose():
     global VERBOSE
     VERBOSE = not VERBOSE
-
 
 """
 Sets a .txt file to be the parser's error log
@@ -452,7 +460,7 @@ def parseDirectories(argv):
 def parse_directory(directory, logFile=None):
     files = os.listdir(directory)
     htmlfiles = getFileTypes(files)['html']
-#    parse_files(htmlfiles, logFile=logFile)
+
     i = 1
     for f in htmlfiles:
         try:

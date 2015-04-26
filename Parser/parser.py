@@ -14,7 +14,7 @@ import configparser
 _main = False
 _error = ''
 _parserSet = False
-
+_defaultConfig = 'config.ini'
 
 #The following global variables are defined by the a config file
 #that is applied to the parser
@@ -639,6 +639,11 @@ def close_parser():
 def is_set():
     return _parserSet
     
+def default_config():
+    config = configparser.ConfigParser()
+    config.read(_defaultConfig)
+    return config
+    
 """
 A parser object. Gives user access to the public functions in 
 this module
@@ -665,6 +670,7 @@ class Parser():
         self.set_csv_dump   = set_csv_dump
         self.toggle_verbose = toggle_verbose
         self.is_set         = is_set
+        self.default_config = default_config
            
 
 """
@@ -674,7 +680,7 @@ it allows all others to pass.
 """
 def __main__():
     parser = Parser('config.ini')
-
+    print(parser.default_config().sections())
     argv = sys.argv
     argv.pop(0)
     try:

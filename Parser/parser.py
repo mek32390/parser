@@ -323,8 +323,6 @@ def handleFlags(argv):
                 raise BadInputError()
             elif i == (len(argv) - 1):
                 Logger = None
-#                _error = 'No log file name given'
-#                raise BadInputError()
             elif argv[i+1].split('.')[len(argv[i+1].split('.'))-1] == 'txt':
                 set_logger(argv[i+1])
                 argv.pop(i)

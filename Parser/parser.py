@@ -8,55 +8,25 @@ Extracts selected data from html files and writes it to csv files
 import sys, os.path, datetime
 sys.path.append(os.path.join(sys.path[0] + '/Parser'))
 from Parser.fileParser import parse, can_parse, setup_parser, clean_env, NonexistantKeyError, UnparseableFileError, UnsetFileParserError
+import configparser
 
 #True if script is Main
 _main = False
 _error = ''
+_parserSet = False
 
-#if no csv file is given, one will be created based on the mapping of
-#FILENAME_BASE on the first parsed entry. If FILENAME_BASE maps to 
-#None, the file will be names "class_list.csv".
-FILENAME_BASE = 'course'   
 
-PARSED_KEYWORDS = ['first', 'email', 'last', 'course', 'instructor', 'role']
-DEFAULT_KEYWORDS = ['first', 'email', 'last', 'course', 'instructor']
-currentKeywords = DEFAULT_KEYWORDS
-#Used to determine if an entry should be place in the CSV file.
-#If a mapping <keywork>: [<value>,..] exists, then only entries where <keywork> map
-#to <value> in the list will be allowed. 
-#If a mapping <~keywork>: [<value>,..] exists, then only entries where <keywork> does
-#not map to <value> in the list will be allowed. 
-ENTRY_RESTRICTIONS ={
-#                    '~role': ['Instructor'],
-#                       'role': [None],
-                     'role': ['Student', None],
-                    }
+#The following global variables are defined by the a config file
+#that is applied to the parser
+FILENAME_BASE = None  
+PARSED_KEYWORDS = []
+WRITTEN_KEYWORDS = []
+ENTRY_RESTRICTIONS = {}
 VERBOSE = False
-Logger  = 'Logger.txt'
-ErrorLog= 'Errors.txt'
-CsvDump = 'Csv_Dump'
+Logger  = None
+#ErrorLog= None
+CsvDump = None
 
-
-"""
-Checks for any restrictions
-"""
-def restricted(entry):
-    restricted = False
-
-    for k in entry.keys():
-        #Allowed values
-        if k in ENTRY_RESTRICTIONS.keys():
-            restricted = True
-            for v in ENTRY_RESTRICTIONS[k]:
-                if entry[k] == v:
-                    restricted = False
-                    break
-        #Restricted Values
-        if ('~' + k) in ENTRY_RESTRICTIONS.keys():
-            for v in ENTRY_RESTRICTIONS[('~' + k)]:
-                if entry[k] == v:
-                    restricted = True
-    return restricted
 
 """
 Checks for errors in the command line for a script
@@ -119,7 +89,6 @@ def checkCommandLineArgs(argv):
         _error = 'Only one file can be set as the parser\'s log'
         raise BadInputError()
     if len(directories) > 0:
-#        _error = 'Parser can only dump csv files into a single directory'
         _error = 'Use -c flag to specify a csv dump directory'
         raise BadInputError()
 
@@ -155,7 +124,7 @@ def setup(f):
     
 
 """
-Extracts a dicitonary mapping keywords to parsed data
+Extracts a dictionary mapping keywords to parsed data
 @f: An open file
 @return: A list of Entries
 """
@@ -177,9 +146,9 @@ def writeCSV(entries, CSVfilename = None):
     header = ''
     currentLines = {}
 
-    for i in range(len(currentKeywords)):
-        header += currentKeywords[i]
-        if i != (len(currentKeywords)-1):
+    for i in range(len(WRITTEN_KEYWORDS)):
+        header += WRITTEN_KEYWORDS[i]
+        if i != (len(WRITTEN_KEYWORDS)-1):
             header += ', '
         else:
             header += '\n'
@@ -198,10 +167,10 @@ def writeCSV(entries, CSVfilename = None):
                 continue
             i = 0
             newEntry = ''
-            for k in currentKeywords:
+            for k in WRITTEN_KEYWORDS:
                 if e[k] is not None:
                     newEntry += e[k]
-                if i != (len(currentKeywords) - 1):
+                if i != (len(WRITTEN_KEYWORDS) - 1):
                     newEntry += ', '
                 else:
                     newEntry += '\n'
@@ -221,7 +190,6 @@ def createCSVFile(entries, CSVfilename):
         os.makedirs(os.path.join(sys.path[0], CsvDump))
     filepath = os.path.join(sys.path[0], CsvDump)
     
-
     try:
         if CSVfilename is None:
             if len(entries) > 0:
@@ -242,6 +210,27 @@ def createCSVFile(entries, CSVfilename):
     else:
         filepath += 'class_list.csv'
         return open(filepath, 'w+')
+
+"""
+Checks for any restrictions
+"""
+def restricted(entry):
+    restricted = False
+
+    for k in entry.keys():
+        #Allowed values
+        if k in ENTRY_RESTRICTIONS.keys():
+            restricted = True
+            for v in ENTRY_RESTRICTIONS[k]:
+                if entry[k] == v:
+                    restricted = False
+                    break
+        #Restricted Values
+        if ('~' + k) in ENTRY_RESTRICTIONS.keys():
+            for v in ENTRY_RESTRICTIONS[('~' + k)]:
+                if entry[k] == v:
+                    restricted = True
+    return restricted
 
 """
 Seperates the given file names into lists of html, csv,
@@ -288,7 +277,7 @@ and removed from argv. If -d is present, it will
 become the first element of argv. 
 """
 def handleFlags(argv):
-    global _error
+    global _error, Logger
     
     if len(argv) < 1:
         _error = 'No command line arguments'
@@ -333,13 +322,14 @@ def handleFlags(argv):
                 Logger = None
 #                _error = 'No log file name given'
 #                raise BadInputError()
-            elif argv[i+1].split('.')[len(argv)-1] == 'txt':
-                if not os.path.isfile(argv[i+1]):
-                    _error = 'Log is not a file'
-                    raise BadInputError()
-                else:
-                    set_error_log(argv[i+1])
-                    argv.pop(i)
+            elif argv[i+1].split('.')[len(argv[i+1].split('.'))-1] == 'txt':
+                set_logger(argv[i+1])
+#                if not os.path.isfile(argv[i+1]):
+#                    _error = 'Log is not a file'
+#                    raise BadInputError()
+#                else:
+#                    set_error_log(argv[i+1])
+#                    argv.pop(i)
             else:
                 Logger = None
             argv.pop(i)
@@ -358,7 +348,7 @@ def handleFlags(argv):
         if not removed:
             i += 1
     return argv
-
+    
 """
 Toggles the parser's verbose setting
 """
@@ -369,16 +359,17 @@ def toggle_verbose():
 """
 Sets a .txt file to be the parser's error log
 """
-def set_error_log(errorLog):
-    global _error, Log
+def set_logger(logname):
+    global _error, Logger
 
-    fname = errorLog.split('.')
+    fname = logname.split('.')
     if len(fname) > 1:
         t = fname[len(fname) - 1]
         if t != 'txt':
             _error = 'Error log should be a text file'
             raise BadInputError()
-    Log = errorLog
+    Logger = logname
+
 
 """
 Sets the given directory to be the directory that
@@ -398,6 +389,9 @@ Parses the files and writes them to csv files
 @argv Arguments to parse.
 """
 def parse_and_write(htmlFile, CsvFile=None):       
+    if not _parserSet:
+        raise ParserSetError(_parserSet)
+
     try:
         opened = setup(htmlFile)
         entries = getEntries(opened)
@@ -421,28 +415,31 @@ and corresponding csv files are written.
 def parseCommandLine(argv):
     global _error, CsvDump
 
+    message = ''
     checkCommandLineArgs(argv)
     set_csv_dump(CsvDump)    
     
     fileTypes   = getFileTypes(argv)
     htmlfiles   = fileTypes['html']
     csvfiles    = fileTypes['csv']    
-    verbLog     = None        
-    logFile     = None
+    parse_files(htmlfiles, csvfiles)
+#    verbLog     = None        
+#    logFile     = None
 
-    if len(fileTypes['other']) > 0:
-        verbLog = os.path.join(sys.path[0], CsvDump, fileTypes['other'][0])
+#    if len(fileTypes['other']) > 0:
+#        verbLog = os.path.join(sys.path[0], CsvDump, fileTypes['other'][0])
 
-    if verbLog is not None:
-        if os.path.isfile(verbLog):        
-            logFile = open(verbLog, 'a')
-        else:
-            logFile = open(verbLog)
-            
-        for i in range(25):
-            logFile.write("_")        
-        logFile.write('\nNew entries added ' + str(datetime.datetime.now()) + '\n')           
-    parse_files(htmlfiles, csvfiles, logFile)
+#    if verbLog is not None:
+#        if os.path.isfile(verbLog):        
+#            logFile = open(verbLog, 'a')
+#        else:
+#            logFile = open(verbLog)
+      
+#        for i in range(25):
+#            logFile.write("_")        
+#            message += '_'
+#   message += '\nNew entries added ' + str(datetime.datetime.now()) + '\n'
+#        logFile.write('\nNew entries added ' + str(datetime.datetime.now()) + '\n')           
 
 
 """
@@ -455,9 +452,11 @@ def parseDirectories(argv):
     directories = getFileTypes(argv)['other']
     for d in directories:
         parse_directory(os.path.abspath(d))
-
-        
+     
 def parse_directory(directory, logFile=None):
+    if not _parserSet:
+        raise ParserSetError(_parserSet)
+
     files = os.listdir(directory)
     htmlfiles = getFileTypes(files)['html']
 
@@ -466,10 +465,10 @@ def parse_directory(directory, logFile=None):
         try:
             parse_and_write(os.path.join(sys.path[0], directory, f))
             message = str(i) + ': Parsed ' + f
-            addMessage(message, logFile)
+            addMessage(message)
         except Exception as e:
             message = str(i) + ': Could not parse ' + f
-            addMessage(message, logFile)
+            addMessage(message)
             if len(_error) == 0:
                 raise e
         i += 1
@@ -478,7 +477,9 @@ def parse_directory(directory, logFile=None):
 Parses a list of htmlfiles, adding them to their corresponding
 csv file if given.
 """
-def parse_files(htmlfiles, csvfiles=[], logFile=None):
+def parse_files(htmlfiles, csvfiles=[]):
+    if not _parserSet:
+        raise ParserSetError(_parserSet)
     i = 0
     for f in htmlfiles:
         try:
@@ -491,10 +492,10 @@ def parse_files(htmlfiles, csvfiles=[], logFile=None):
                 raise Exception()
             i += 1
             message = str(i) + ': Parsed ' + f
-            addMessage(message, logFile)
+            addMessage(message)
         except Exception as e:
             message = str(i) + ': Could not parse ' + f
-            addMessage(message, logFile)
+            addMessage(message)
             if len(_error) == 0:
                 raise e
 
@@ -502,11 +503,169 @@ def parse_files(htmlfiles, csvfiles=[], logFile=None):
 Adds a message to a logger and prints it to stdio
 if verbose mode is active. Newlines are added automatically.
 """
-def addMessage(message, logFile=None):
-    if logFile is not None:
-        logFile.write(message + '\n')
+def addMessage(message):
     if VERBOSE and _main:
         print(message)
+#    global Logger
+#Uses Logger
+#    logFile = None
+#    if Logger is not None:
+#        if not os.path.isabs(Logger):
+#            Logger = os.path.join(sys.path[0], CsvDump, Logger)
+#            if os.path.isfile(Logger):
+#                logFile = open(Logger, 'a')
+#            else:
+#                logFile = open(Logger)
+#        else:
+#            if os.path.isfile(os.path.join(sys.path[0], CsvDump, Logger)):
+#                logFile = open(os.path.join(sys.path[0], CsvDump, Logger),
+#                                'a')
+#            else:
+#                logFile = open(os.path.join(sys.path[0], CsvDump, Logger))
+#        logFile.write(message + '\n')
+#        logFile.close()
+
+"""
+Applies the settings in the config.ini file given. 
+"""
+def apply_config(configFile):
+    global VERBOSE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, LOGGER, FILENAME_BASE, VERBOSE, CsvDump
+    if not _parserSet:
+        raise ParserSetError(_parserSet)
+        
+    
+    config = configparser.ConfigParser()
+    config.read(configFile)
+    PARSED_KEYWORDS = parseKeywords( config, 
+                                        'PARSED_KEYWORDS',
+                                        'parsed_keywords'
+                                      )
+    WRITTEN_KEYWORDS = parseKeywords( config,
+                                      'WRITTEN_KEYWORDS',
+                                      'WRITTEN_keywords'
+                                      )
+    ENTRY_RESTRICTIONS = parseRestrictions(config,
+                                           'ENTRY_RESTRICTIONS')
+    VERBOSE = bool(parseValue(config, 'VALUES', 'VERBOSE'))
+    Logger = parseValue(config, 'VALUES', 'Logger')
+    FILENAME_BASE = parseValue(config, 'VALUES', 'FILENAME_BASE')
+    CsvDump = parseValue(config, 'VALUES', 'CSV_DUMP')
+    
+def parseKeywords(config, section, key):
+    keywords = []
+    try:
+        val = config[section][key]
+        for w in val.strip('\n\t ').split('\n'):
+            keywords.append(w)
+    except KeyError as e:
+        pass
+#    print(keywords)
+    return keywords
+    
+
+def parseRestrictions(config, section):
+    restrictions = {}
+    section = config[section]
+    try:
+        for k in section:
+            words = []
+            vals = section[k]
+            for w in vals.strip('\n\t ').split('\n'):
+                if w != '~None':
+                    words.append(w.strip('\n\t '))
+                else:
+                    words.append(None)
+            restrictions[k] = words
+    except KeyError as e:
+        pass
+#    print(restrictions)
+    return restrictions
+    
+def parseValue(config, section, key):
+    val = '~None'
+    try:
+        val = config[section][key]
+    except KeyError as e:
+        pass
+#    print (val)
+    if val == '~None':
+        return None
+    else:
+        return val
+
+def verifyDefaultValues():
+    if not isinstance(PARSED_KEYWORDS, list):
+        message = 'parsed_keywords not properly set'
+        raise BadConfigError(message)
+
+    if not isinstance(WRITTEN_KEYWORDS, list):
+        message = 'parsed_keywords not properly set'
+        raise BadConfigError(message)
+    else:
+        for w in WRITTEN_KEYWORDS:
+            if w not in PARSED_KEYWORDS:
+                message = 'Value ' + w + ' is not parsed from the file'
+                raise BadConfigError(message)
+    if not isinstance(ENTRY_RESTRICTIONS, dict):
+        message = 'ENTRY_RESTRICTIONS not properly set'
+        raise BadConfigError(message)
+
+    if not isinstance(FILENAME_BASE, str):
+        message = 'FILENAME_BASE not properly set'
+        raise BadConfigError(message)
+
+    if not isinstance(CsvDump, str):
+        message = 'CSV_DUMP not properly set'
+        raise BadConfigError(message)
+
+"""
+Resets the state of the parser so that it can be properly
+reset by another config file.
+"""
+def close_parser():
+    global FILENAME_BASE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, VERBOSE, Logger, CsvDump, _error, _parserSet
+
+    FILENAME_BASE = None  
+    PARSED_KEYWORDS = []
+    WRITTEN_KEYWORDS = []
+    ENTRY_RESTRICTIONS = {}
+    VERBOSE = False
+    Logger  = None
+    #ErrorLog= None
+    CsvDump = None
+    _error = ''
+    _parserSet = False
+    
+def is_set():
+    return _parserSet
+    
+"""
+A parser object. Gives user access to the public functions in 
+this module
+"""
+class Parser():
+    def __init__(self, config):
+        global _parserSet
+		
+        if _parserSet:
+            raise ParserSetError(_parserSet)
+        try:
+            _parserSet = True
+            apply_config(config)
+            verifyDefaultValues()
+            
+        except Exception as e:
+            close_parser()
+            raise e
+        self.close_parser   = close_parser
+        self.set_logger     = set_logger
+        self.apply_config   = apply_config
+        self.parse_files    = parse_files
+        self.parse_and_write= parse_and_write
+        self.set_csv_dump   = set_csv_dump
+        self.toggle_verbose = toggle_verbose
+        self.is_set         = is_set
+           
 
 """
 Main function. Only run when script is run as main program.
@@ -514,7 +673,7 @@ Main handles errors that script is designed to catch,
 it allows all others to pass.
 """
 def __main__():
-    global _error
+    parser = Parser('config.ini')
 
     argv = sys.argv
     argv.pop(0)
@@ -533,8 +692,23 @@ def __main__():
             raise e
 
 #Costum Exception raised for bad input
+class ParserSetError():
+    def __init__(self, val):
+        super()
+        self.val = val
+    def __repr__(cls):
+        if cls.val:
+            return 'Parser is already set\n'
+        else:
+            return 'Parser has not been set\n'
 class BadInputError(Exception):
     pass
+class BadConfigError(Exception):
+    def __init__(self, message):
+        super()
+        self.message = message
+    def __repr__(cls):
+        return cls.message + '\n'
 
 if __name__ == "__main__":
     _main = True

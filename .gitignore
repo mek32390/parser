@@ -1,6 +1,14 @@
 #Vim swap files
 *.swp
 *.py~
+*.ini~
+
+#Default csv dumping directory
+CSV_Dump/
+
+#Test config file
+testConfig.ini
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

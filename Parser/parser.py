@@ -188,9 +188,10 @@ def createCSVFile(entries, CSVfilename):
     global _error, CsvDump
 
     filename = ''
-    if not os.path.isdir(os.path.join(sys.path[0], CsvDump)):
-        os.makedirs(os.path.join(sys.path[0], CsvDump))
-    filepath = os.path.join(sys.path[0], CsvDump)
+
+    if not os.path.isdir(CsvDump):
+        os.makedirs(CsvDump)
+    filepath = CsvDump
     
     try:
         if CSVfilename is None:
@@ -326,12 +327,7 @@ def handleFlags(argv):
 #                raise BadInputError()
             elif argv[i+1].split('.')[len(argv[i+1].split('.'))-1] == 'txt':
                 set_logger(argv[i+1])
-#                if not os.path.isfile(argv[i+1]):
-#                    _error = 'Log is not a file'
-#                    raise BadInputError()
-#                else:
-#                    set_error_log(argv[i+1])
-#                    argv.pop(i)
+                argv.pop(i)
             else:
                 Logger = None
             argv.pop(i)
@@ -350,7 +346,7 @@ def handleFlags(argv):
         if not removed:
             i += 1
     return argv
-    
+
 """
 Toggles the parser's verbose setting
 """
@@ -425,37 +421,19 @@ def parseCommandLine(argv):
     htmlfiles   = fileTypes['html']
     csvfiles    = fileTypes['csv']    
     parse_files(htmlfiles, csvfiles)
-#    verbLog     = None        
-#    logFile     = None
-
-#    if len(fileTypes['other']) > 0:
-#        verbLog = os.path.join(sys.path[0], CsvDump, fileTypes['other'][0])
-
-#    if verbLog is not None:
-#        if os.path.isfile(verbLog):        
-#            logFile = open(verbLog, 'a')
-#        else:
-#            logFile = open(verbLog)
-      
-#        for i in range(25):
-#            logFile.write("_")        
-#            message += '_'
-#   message += '\nNew entries added ' + str(datetime.datetime.now()) + '\n'
-#        logFile.write('\nNew entries added ' + str(datetime.datetime.now()) + '\n')           
-
 
 """
 Parses all files in the directory, and places them in the
 CsvDump. 
 """
 def parseDirectories(argv):
-#    argv.pop(0)    
+#    argv.pop(0)
     checkParseDirectoriesArgs(argv)
     directories = getFileTypes(argv)['other']
     for d in directories:
         parse_directory(os.path.abspath(d))
      
-def parse_directory(directory, logFile=None):
+def parse_directory(directory):
     if not _parserSet:
         raise ParserSetError(_parserSet)
 
@@ -505,37 +483,23 @@ def parse_files(htmlfiles, csvfiles=[]):
 Adds a message to a logger and prints it to stdio
 if verbose mode is active. Newlines are added automatically.
 """
-def addMessage(message):
-    if VERBOSE and _main:
+def addMessage(message, logOnly=False):
+    if VERBOSE and _main and not logOnly:
         print(message)
-#    global Logger
-#Uses Logger
-#    logFile = None
-#    if Logger is not None:
-#        if not os.path.isabs(Logger):
-#            Logger = os.path.join(sys.path[0], CsvDump, Logger)
-#            if os.path.isfile(Logger):
-#                logFile = open(Logger, 'a')
-#            else:
-#                logFile = open(Logger)
-#        else:
-#            if os.path.isfile(os.path.join(sys.path[0], CsvDump, Logger)):
-#                logFile = open(os.path.join(sys.path[0], CsvDump, Logger),
-#                                'a')
-#            else:
-#                logFile = open(os.path.join(sys.path[0], CsvDump, Logger))
-#        logFile.write(message + '\n')
-#        logFile.close()
+#uses Logger
+    if Logger is not None:
+        logFile = open(Logger, 'a')
+        logFile.write(message + '\n')
+        logFile.close()
 
 """
 Applies the settings in the config.ini file given. 
 """
 def apply_config(configFile):
-    global VERBOSE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, LOGGER, FILENAME_BASE, VERBOSE, CsvDump
+    global VERBOSE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, Logger, FILENAME_BASE, VERBOSE, CsvDump
     if not _parserSet:
         raise ParserSetError(_parserSet)
         
-    
     config = configparser.ConfigParser()
     config.read(configFile)
     PARSED_KEYWORDS = parseKeywords( config, 
@@ -673,7 +637,6 @@ class Parser():
         self.toggle_verbose = toggle_verbose
         self.is_set         = is_set
         self.default_config = default_config
-           
 
 """
 Main function. Only run when script is run as main program.
@@ -687,6 +650,13 @@ def __main__():
     argv.pop(0)
     try:
         argv = handleFlags(argv)
+        message = ''   
+        for i in range(25):
+            message += '_'
+        message += '\nNew entries added ' + str(datetime.datetime.now())
+        addMessage(message, logOnly=True)
+
+
         if argv[0] == '-d':
             argv.pop(0)
             parseDirectories(argv)
@@ -699,7 +669,7 @@ def __main__():
         else:
             raise e
 
-#Costum Exception raised for bad input
+#Custom Exception raised for bad input
 class ParserSetError():
     def __init__(self, val):
         super()

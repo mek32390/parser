@@ -681,7 +681,7 @@ Main handles errors that script is designed to catch,
 it allows all others to pass.
 """
 def __main__():
-    parser = Parser('config.ini')
+    parser = Parser(os.path.abspath(os.path.join(sys.path[0],'config.ini')))
 
     argv = sys.argv
     argv.pop(0)

@@ -15,6 +15,8 @@ _main = False
 _error = ''
 _parserSet = False
 _defaultConfig = 'config.ini'
+#Config file for testing. Should stay commented
+#_defaultConfig = 'testConfig.ini'
 
 #The following global variables are defined by the a config file
 #that is applied to the parser
@@ -680,7 +682,7 @@ it allows all others to pass.
 """
 def __main__():
     parser = Parser('config.ini')
-    print(parser.default_config().sections())
+
     argv = sys.argv
     argv.pop(0)
     try:

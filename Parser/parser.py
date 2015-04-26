@@ -351,6 +351,12 @@ Toggles the parser's verbose setting
 def toggle_verbose():
     global VERBOSE
     VERBOSE = not VERBOSE
+    
+"""
+Returns verbose status
+"""
+def is_verbose():
+    return VERBOSE
 
 """
 Sets a .txt file to be the parser's error log
@@ -377,8 +383,8 @@ def set_csv_dump(directory):
     if not os.path.isabs(directory):
         directory = os.path.abspath(directory)
     CsvDump = directory
-    if not os.path.isdir(os.path.join(sys.path[0], CsvDump)):
-        os.makedirs(os.path.join(sys.path[0], CsvDump))    
+#    if not os.path.isdir(os.path.join(sys.path[0], CsvDump)):
+#        os.makedirs(os.path.join(sys.path[0], CsvDump))    
     
 """
 Parses the files and writes them to csv files
@@ -558,29 +564,38 @@ def parseValue(config, section, key):
         return val
 
 def verifyDefaultValues():
-    if not isinstance(PARSED_KEYWORDS, list):
-        message = 'parsed_keywords not properly set'
-        raise BadConfigError(message)
+    global _error
+    
+    message = ''
+    try:
+        if not isinstance(PARSED_KEYWORDS, list):
+            message = 'parsed_keywords not properly set'
+            raise BadConfigError(message)
 
-    if not isinstance(WRITTEN_KEYWORDS, list):
-        message = 'parsed_keywords not properly set'
-        raise BadConfigError(message)
-    else:
-        for w in WRITTEN_KEYWORDS:
-            if w not in PARSED_KEYWORDS:
-                message = 'Value ' + w + ' is not parsed from the file'
-                raise BadConfigError(message)
-    if not isinstance(ENTRY_RESTRICTIONS, dict):
-        message = 'ENTRY_RESTRICTIONS not properly set'
-        raise BadConfigError(message)
+        if not isinstance(WRITTEN_KEYWORDS, list):
+            message = 'parsed_keywords not properly set'
+            raise BadConfigError(message)
+        else:
+            for w in WRITTEN_KEYWORDS:
+                if w not in PARSED_KEYWORDS:
+                    message = 'Value ' + w + ' is not parsed from the file'
+                    raise BadConfigError(message)
+        if not isinstance(ENTRY_RESTRICTIONS, dict):
+            message = 'ENTRY_RESTRICTIONS not properly set'
+            raise BadConfigError(message)
+        if not isinstance(FILENAME_BASE, str):
+            message = 'FILENAME_BASE not properly set'
+            raise BadConfigError(message)
+        elif FILENAME_BASE not in PARSED_KEYWORDS:
+            message = 'FILENAME_BASE is not parsed'
+            raise BadConfigError(message)
+        if not isinstance(CsvDump, str):
+            message = 'CSV_DUMP not properly set'
+            raise BadConfigError(message)
 
-    if not isinstance(FILENAME_BASE, str):
-        message = 'FILENAME_BASE not properly set'
-        raise BadConfigError(message)
-
-    if not isinstance(CsvDump, str):
-        message = 'CSV_DUMP not properly set'
-        raise BadConfigError(message)
+    except BadConfigError as e:
+        _error = message
+        raise e
 
 """
 Resets the state of the parser so that it can be properly
@@ -597,7 +612,7 @@ def close_parser():
     Logger  = None
     #ErrorLog= None
     CsvDump = None
-    _error = ''
+#    _error = ''
     _parserSet = False
     
 def is_set():
@@ -635,6 +650,7 @@ class Parser():
         self.toggle_verbose = toggle_verbose
         self.is_set         = is_set
         self.default_config = default_config
+        self.is_verbose     = is_verbose
 
 """
 Main function. Only run when script is run as main program.
@@ -642,11 +658,11 @@ Main handles errors that script is designed to catch,
 it allows all others to pass.
 """
 def __main__():
-    parser = Parser(os.path.abspath(os.path.join(sys.path[0],'config.ini')))
-
-    argv = sys.argv
-    argv.pop(0)
     try:
+        parser = Parser(os.path.abspath(os.path.join(sys.path[0],'config.ini')))
+        argv = sys.argv
+        argv.pop(0)
+  
         argv = handleFlags(argv)
         message = ''   
         for i in range(25):

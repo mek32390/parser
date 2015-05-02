@@ -1,6 +1,7 @@
 import sys, traceback
 from bs4 import BeautifulSoup
-import schemas as sch
+#import Parser.Parser.schemas as sch
+import Parser.schemas as sch
 
 
 RAISE_ERRORS = False
@@ -93,7 +94,8 @@ def findSchema():
                 for k in keywords:
                     try:
                         data = extractData(k, contents[0])
-                        hits += 1
+                        if data != None:
+                            hits += 1                     
                     except Exception as e:
                         pass
         #Ignore schema if validation/contents don't work
@@ -150,15 +152,16 @@ def extractData(key, block):
     data = None
     rules = schema.get_rules()
     if rules[key] is not None:
-        #figure something out
         data = rules[key](block)
         if safeToExtract(data):
             if isinstance(data, str):
-                return data.strip('\n\t ')
+                data = data.strip('\n\t- ')
+                return data
             else:
                 return data
         elif data != None:
-            return data.text.strip('\n\t ') 
+            data = data.text.strip('\n\t- ')
+            return data
     return None
 
 def safeToExtract(data):

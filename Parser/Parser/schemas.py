@@ -1,28 +1,4 @@
 """
-schemas.py module defines Schemas for parsing Html documents.
-Each Schema definition must be defined as a function named:
-    SchemaDefinition_<name>
-where <name> is replaced with a unique identifier for that defintion.
-Rules:
-These functions should create instances of Schema objects, instantiated
-with a dictionary mapping the strings in keywords to lists. These lists
-should contain instructions for finding the information in the html
-file. The fileReader parser uses the lists to call the 
-find(div) and find(div, dict) methods of the Beautiful Soup library.
-The list may also contain function names that take a single soup
-argument. These functions must be defined as methods in the Schema
-object returned by the SchemaDefinition_<name> function.
-Reserved Keywords:
-'validation' keyword should map to a list of lists; which tells the
-parser how to find a piece of data in the document. The parser will
-extract the data from each list at n-1, and compare it to the
-string value at n; where n = len(list)-1. If there are less than 2
-members in a list, parser assumes html is valid.
-
-'contents' keyword should map to a sequence following the nromal rules.
-The parser will call find_all on the last element, and use the html
-blocks returned as a starting point for finding the rest of the parsed
-data.
 
 """
 import sys
@@ -71,7 +47,6 @@ class Schema():
             else:
                 self.rules[word] = None
         if (self.rules['contents'] is None) or (self.rules['validation'] is None):
-#            print(self.rules)
             raise BadSchemaError()
 
     def get_rules(cls):
@@ -237,10 +212,14 @@ def SchemaDefinition_SyracuseBlackBoard():
             return True
 
     def test1(soup):
-        if soup.find('title').text.strip('\t\n ') == 'Select Users':
+        tag = soup.find('title').text
+        words = tag.split('-')
+        words1 = tag.split('–')
+        if (words1[0].strip('\t\n ') or words[0].strip('\t\n ')) == 'Select Users':
             return True
         else:
-            return False
+            
+            return False    
 ##
     def _contents(soup):
         return soup.find_all('option')
@@ -305,7 +284,7 @@ def SchemaDefinition_UofAD2L():
         return True
 ##
     def _contents(soup):
-        block = soup.find('table', {'class': 'd_g d_gl', 'id': 'z_i'})
+        block = soup.find('table', {'class': 'd_g d_gl'})
         contents = block.find_all('tr')
         contents.pop(0)
         contents.pop(0)
@@ -405,19 +384,22 @@ def SchemaDefinition_UofAD2L():
 Defines the schema used to parse the University of Arizona's
 varient of the Blackboard CMS.
 """
+
 def SchemaDefinition_UofABlackBoard():
     schema = SchemaDefinition_SyracuseBlackBoard()
-    def _validation(soup):
-        if not test1(soup):
-            return False
-        return True
+#    def _validation(soup):
+#        if not test1(soup):
+#            return False
+#        return True
     
-    def test1(soup):
-        tag = soup.find('title').text.strip('\t\n ')
-        if tag == 'Select Users – Basic Operations Mgmt (Spring - 2015)':
-            return True
-        else:
-            return False
+#    def test1(soup):
+#        tag = soup.find('title').text.strip('\t\n ')
+#        words = tag.split(' - ')
+#        if 
+#        if tag == 'Select Users – Basic Operations Mgmt (Spring - 2015)':
+#            return True
+#        else:
+#            return False
 ##    
     def _contents(soup):
         block = soup.find('select', {'id': 'USERS_AVAIL'})
@@ -466,22 +448,22 @@ class BadSchemaError(Exception):
 if not validateSchemas():
     raise BadSchemaError()
 
-from bs4 import BeautifulSoup
+#from bs4 import BeautifulSoup
 
 def __main__():
     pass
-    soup = BeautifulSoup(open(sys.argv[1]))
-    schema = SchemaDefinition_MoodleVarient()
+#    soup = BeautifulSoup(open(sys.argv[1]))
+#    schema = SchemaDefinition_MoodleVarient()
 #    print(schema.rules['validation'](soup))
-    contents = schema.rules['contents'](soup)
+#    contents = schema.rules['contents'](soup)
 #    print(contents)
-    print(len(contents))
-    for c in contents:
-        course = schema.get_rules()['course'](c)
-        first = schema.get_rules()['first'](c)
-        last = schema.get_rules()['last'](c)
-        email = schema.get_rules()['email'](c)
-        print(first," ", last, " ", course)
+#    print(len(contents))
+#    for c in contents:
+#        course = schema.get_rules()['course'](c)
+#        first = schema.get_rules()['first'](c)
+#        last = schema.get_rules()['last'](c)
+#        email = schema.get_rules()['email'](c)
+#        print(first," ", last, " ", course)
 #    print(schema.get_rules()['course'](contents[0]))
 #    print(schema.get_rules()['validation'])
 

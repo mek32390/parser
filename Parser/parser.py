@@ -5,16 +5,21 @@ Usage:  parser.py [<filename.html> | <filename.csv>]*
 Usage:  parser.py -d [/HtmlDirectoryPath]^+ [/CsvDumpDirectory] 
 Extracts selected data from html files and writes it to csv files
 """
-import sys, os.path, datetime
-sys.path.append(os.path.join(sys.path[0] + '/Parser'))
+import sys, os, datetime
+sys.path.append(os.getcwd())
+
+#from Parser.Parser.fileParser import parse, can_parse, setup_parser, clean_env, NonexistantKeyError, UnparseableFileError, UnsetFileParserError
 from Parser.fileParser import parse, can_parse, setup_parser, clean_env, NonexistantKeyError, UnparseableFileError, UnsetFileParserError
+#from os.path.join(os.getcwd(), 'Parser') import parse, can_parse, setup_parser, clean_env, NonexistantKeyError, UnparseableFileError, UnsetFileParserError 
 import configparser
+
 
 #True if script is Main
 _main = False
 _error = ''
 _parserSet = False
-_defaultConfig = 'config.ini'
+_defaultConfig = os.path.join(os.path.dirname(__file__), 'config.ini')
+_currentConfig = None
 #Config file for testing. Should stay commented
 #_defaultConfig = 'testConfig.ini'
 
@@ -383,8 +388,6 @@ def set_csv_dump(directory):
     if not os.path.isabs(directory):
         directory = os.path.abspath(directory)
     CsvDump = directory
-#    if not os.path.isdir(os.path.join(sys.path[0], CsvDump)):
-#        os.makedirs(os.path.join(sys.path[0], CsvDump))    
     
 """
 Parses the files and writes them to csv files
@@ -448,10 +451,10 @@ def parse_directory(directory):
     for f in htmlfiles:
         try:
             parse_and_write(os.path.join(sys.path[0], directory, f))
-            message = str(i) + ': Parsed ' + f
+            message = str(i) + ':\tParsed ' + f
             addMessage(message)
         except Exception as e:
-            message = str(i) + ': Could not parse ' + f
+            message = str(i) + ':\tCould not parse ' + f
             addMessage(message)
             if len(_error) == 0:
                 raise e
@@ -499,13 +502,20 @@ def addMessage(message, logOnly=False):
 """
 Applies the settings in the config.ini file given. 
 """
+##Make this function differentiate between a configparser ofbject and a file name,
+##if parser, set it up directly. Otherwise, do this
 def apply_config(configFile):
-    global VERBOSE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, Logger, FILENAME_BASE, VERBOSE, CsvDump
+    global VERBOSE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, Logger, FILENAME_BASE, VERBOSE, CsvDump, _currentConfig
     if not _parserSet:
         raise ParserSetError(_parserSet)
-        
-    config = configparser.ConfigParser()
-    config.read(configFile)
+    config = None
+    if isinstance(configFile, configparser.ConfigParser):
+        config = configFile
+    else:     
+        config = configparser.ConfigParser()
+        config.read(configFile)
+    _currentConfig = config
+    
     PARSED_KEYWORDS = parseKeywords( config, 
                                         'PARSED_KEYWORDS',
                                         'parsed_keywords'
@@ -516,7 +526,11 @@ def apply_config(configFile):
                                       )
     ENTRY_RESTRICTIONS = parseRestrictions(config,
                                            'ENTRY_RESTRICTIONS')
-    VERBOSE = bool(parseValue(config, 'VALUES', 'VERBOSE'))
+    vTemp = parseValue(config, 'VALUES', 'VERBOSE')
+    if vTemp == "True": 
+        VERBOSE = True
+    else:
+        VERBOSE = False
     Logger = parseValue(config, 'VALUES', 'Logger')
     FILENAME_BASE = parseValue(config, 'VALUES', 'FILENAME_BASE')
     CsvDump = parseValue(config, 'VALUES', 'CSV_DUMP')
@@ -529,7 +543,6 @@ def parseKeywords(config, section, key):
             keywords.append(w)
     except KeyError as e:
         pass
-#    print(keywords)
     return keywords
     
 
@@ -548,7 +561,6 @@ def parseRestrictions(config, section):
             restrictions[k] = words
     except KeyError as e:
         pass
-#    print(restrictions)
     return restrictions
     
 def parseValue(config, section, key):
@@ -557,7 +569,6 @@ def parseValue(config, section, key):
         val = config[section][key]
     except KeyError as e:
         pass
-#    print (val)
     if val == '~None':
         return None
     else:
@@ -602,7 +613,7 @@ Resets the state of the parser so that it can be properly
 reset by another config file.
 """
 def close_parser():
-    global FILENAME_BASE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, VERBOSE, Logger, CsvDump, _error, _parserSet
+    global FILENAME_BASE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, VERBOSE, Logger, CsvDump, _error, _parserSet, _currentConfig
 
     FILENAME_BASE = None  
     PARSED_KEYWORDS = []
@@ -614,6 +625,7 @@ def close_parser():
     CsvDump = None
 #    _error = ''
     _parserSet = False
+    _currentConfig = None
     
 def is_set():
     return _parserSet
@@ -623,12 +635,15 @@ def default_config():
     config.read(_defaultConfig)
     return config
     
+def get_config():
+    return _currentConfig
+    
 """
 A parser object. Gives user access to the public functions in 
 this module
 """
 class Parser():
-    def __init__(self, config):
+    def __init__(self, config=_defaultConfig):
         global _parserSet
 		
         if _parserSet:
@@ -649,8 +664,9 @@ class Parser():
         self.set_csv_dump   = set_csv_dump
         self.toggle_verbose = toggle_verbose
         self.is_set         = is_set
-        self.default_config = default_config
+        self.get_config     = get_config
         self.is_verbose     = is_verbose
+
 
 """
 Main function. Only run when script is run as main program.
@@ -670,7 +686,6 @@ def __main__():
         message += '\nNew entries added ' + str(datetime.datetime.now())
         addMessage(message, logOnly=True)
 
-
         if argv[0] == '-d':
             argv.pop(0)
             parseDirectories(argv)
@@ -684,7 +699,7 @@ def __main__():
             raise e
 
 #Custom Exception raised for bad input
-class ParserSetError():
+class ParserSetError(Exception):
     def __init__(self, val):
         super()
         self.val = val

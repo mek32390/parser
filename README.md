@@ -28,7 +28,8 @@ Command Line Usage: python3 parser.py [arguments[.html|.csv]
     given csv file, or one will created based on the config file.
 
 External Application Usage:
-    Call parser.Parser(config) constrcutor. 
+    Call parser.Parser(config) constructor. Should be able to have any number of parser
+    instances at one time, however this has not been stress tested. 
     Parser public methods:
         close_parser: Cleans the parser environment
         set_logger: Sets the parser's logger
@@ -37,8 +38,11 @@ External Application Usage:
         parse_and_write: Parses and html and writes it to a csv file
         set_csv_dump: sets the directory that parser will place csv files
         toggle_verbose: Toggles verbose mode
-        is_set: Checks if a the parser is set up for use
+        get_config: Returns an instance of ConfigParser that represents the current state of the Parser
+    Public functions:
         default_config: Gets a copy of the default and working config object
+        get_entries: Returns a list of <keyword, value> dictionaries for the given parsing package
+        get_parsingPackage: Returns a parsing package that can me used to parse an html file
 
 Config.ini file:
     The parser sets its default settings based on the given config.ini file.
@@ -65,7 +69,7 @@ Config.ini file:
                 ~<keyword>: <disallowed val>
                             <disallowed val>
                             
-    Optional fields:
+     Optional fields:
         VERBOSE in [VALUES]
             Sets the default status of verbose mode.
         LOGGER in [VALUES]
@@ -73,7 +77,46 @@ Config.ini file:
             of "~None" will disable the logger.
         ERROR_LOG in [VALUES]
             Not yet implemented.
+
+Known Issues:
+    - Parser logging functionality is limited. 
+    - If findSchema functions in fileParser.py finds two
+        schemas in schemas.py that have the same number of "hits",
+        it is impossible to predict which schema it will use to parse
+        the html file.
+
+Other Files: 
+    fileParser Usage:
+        - fileParses uses an instance of a ParsingPackage object to parse
+            and html file. 
+         -Public fileParser Functions:
+         -make_parsingPackage: return an instance of ParsingPackage that can
+            be used to parse a file
+        -can_parse: Returns true if an html file can be parsed
+        -parse: Returns a collection on <Keyword, value> dictionaries from
+            a ParsingPackage instance.
+    schemas Usage:
+        - There are no public schemas.py functions.
+        - To create a new Schema:
+            - add a function with a name that starts with
+            SchemaDefinition_ to the schemas.py module. 
+            - add variable to store a schema in the beginning.  
+                - If you want to inherit functionality from another
+                    schema, call the SchemaDefinition_<func> for that schema.
+            - Define a function called _<keyword> for any keyword that you want
+                this schema to be able to parse. _<keyword> definitions in sub-schemas
+                will overwrite definitions in inherited super-schemas. 
+            - Set your schema variable to the value returned by calling the function
+                that is returned by the getSchemaCreator function. 
+                -Note that getSchemaCreator takes the value returned by a call to locals()
+                    in the SchemaDefinition_ as a parameter.
+            - return your schema variable.
+        - All schemas must have a definition for _contents and _validation.
+            - This definition can be inherited by another schema.
+         
+
         
+   
     
 
 

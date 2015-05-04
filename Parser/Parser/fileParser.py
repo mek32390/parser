@@ -1,57 +1,38 @@
-import sys, traceback
+import sys
 from bs4 import BeautifulSoup
 #import Parser.Parser.schemas as sch
 import Parser.schemas as sch
 
 
-RAISE_ERRORS = False
+RAISE_ERRORS = False#True
+SCHEMAS = []
 
-#List of all imported schemas
-schemas = []
-
-#Schema that the current file is using
-schema = None
-#List of the information that is to be extracted from this file
-keywords = []
-#Soup is the BeautifulSoup object associated with the open(filename)
-soup = None
-filename = ''
+class ParsingPackage():
+    def __init__(self, f, keywords):
+        self.schema = None
+        self.filename = f.name
+        self.keywords = keywords
+        self.soup = BeautifulSoup(f)
 
 """
-Resets FileReader to its starting set, so that it is ready to parse
-a new file.
-"""
-def clean_env():
-    global keywords, schema, soup, filename
-
-    keywords= []
-    schema  = None
-    soup    = None
-    filename = ''
-
-"""
-Sets the parser to search for the given keywords
-in the file.
+Returns an instance of ParsingPackage the fileParser module
+can use to parse.
 @keys: List of keywords to look for. Parser will use the keyword
     contents because it is a reserved.
 @f: File to parse
 @errors: Raises NonExistantKey error if Keyword is not found.
          Parser is reset.
 """
-def setup_parser(keys, f):
-    global soup, keywords, filename
-    schemaKeys = sch.keywords
-
+def make_parsingPackage(keys, f):
+    schemaKeys  = sch.keywords
+    keywords    = []
     for k in keys:
         if k in schemaKeys:
             if not (sch.reservedKeyword(k)):
                 keywords.append(k)
         else:
-            keywords = []
             raise NonexistantKeyError(k)
-    soup = BeautifulSoup(f)
-    filename = f.name
-
+    return ParsingPackage(f, keys) 
 
 """
 Checks if the set file can be parsed by the script. 
@@ -60,15 +41,14 @@ with an appropriate schema.
 @setter: If true, module sets appropriate schema if found
 @return: True if a schema exists to parse file
 """
-def can_parse(setter=True):
-    global schema
-    if len(keywords) == 0 or soup is None:
+def can_parse(package, setter=False):
+    if len(package.keywords) == 0 or package.soup is None:
         return False
-    s = findSchema()
+    s = findSchema(package)
     if s is None:
         return False
     elif setter:
-        schema = s
+        package.schema = s
         return True
     else:
         return True
@@ -76,24 +56,22 @@ def can_parse(setter=True):
 """
 Returns the Schema that will best parse the file
 """
-def findSchema():
-    global schema, keywords
-
+def findSchema(package):
     mySchema = None
     bestHits = 0
 
     for s in schemas:
         hits = 0
-        schema = getattr(sch, s)()
+        package.schema = getattr(sch, s)()
         try:
-            if not extractData('validation', soup):
+            if not extractData('validation', package.soup, package.schema):
                 raise InvalidHtmlForSchemaError()
-            contents = extractData('contents', soup)
+            contents = extractData('contents', package.soup, package.schema)
             hits += 1
             if len(contents) > 0:
-                for k in keywords:
+                for k in package.keywords:
                     try:
-                        data = extractData(k, contents[0])
+                        data = extractData(k, contents[0], package.schema)
                         if data != None:
                             hits += 1                     
                     except Exception as e:
@@ -106,7 +84,7 @@ def findSchema():
         if hits > bestHits:
             bestHits = hits
             mySchema = s 
-        schema = None
+        package.schema = None
 
     if mySchema is not None:
         return getattr(sch, mySchema)()
@@ -117,22 +95,20 @@ def findSchema():
 Parses the file that the module was set to parse.
 @return: List of Entries
 """
-def parse():
-    global keywords, schema
-
-    if soup is None:
+def parse(package):
+    if package.soup is None:
         raise UnsetFileParserError()
-    if schema is None:
-        if not can_parse():
-            raise UnparseableFileError(filename)
+    if package.schema is None:
+        if not can_parse(package, setter=True):
+            raise UnparseableFileError(package.filename)
     entries = []
-    contents = extractData('contents', soup)
+    contents = extractData('contents', package.soup, package.schema)
 
     for block in contents:
         entry = {}
-        for k in keywords:
+        for k in package.keywords:
             try:
-                data = extractData(k, block)
+                data = extractData(k, block, package.schema)
                 entry[k] = data
             except Exception as e:
                 entry[k] = None
@@ -146,11 +122,10 @@ is parsed from the soup block. Return type is
 directly dependent on the key used to extract
 the data.
 """
-def extractData(key, block):
-    global schema
-    
+def extractData(key, block, schema):  
     data = None
     rules = schema.get_rules()
+    
     if rules[key] is not None:
         data = rules[key](block)
         if safeToExtract(data):

@@ -6,38 +6,28 @@ Usage:  parser.py -d [/HtmlDirectoryPath]^+ [/CsvDumpDirectory]
 Extracts selected data from html files and writes it to csv files
 """
 import sys, os, datetime
-sys.path.append(os.getcwd())
+#sys.path.append(os.getcwd())
 
 #from Parser.Parser.fileParser import parse, can_parse, setup_parser, clean_env, NonexistantKeyError, UnparseableFileError, UnsetFileParserError
-from Parser.fileParser import parse, can_parse, setup_parser, clean_env, NonexistantKeyError, UnparseableFileError, UnsetFileParserError
+from Parser.fileParser import parse, can_parse, make_parsingPackage, NonexistantKeyError, UnparseableFileError, UnsetFileParserError
 #from os.path.join(os.getcwd(), 'Parser') import parse, can_parse, setup_parser, clean_env, NonexistantKeyError, UnparseableFileError, UnsetFileParserError 
 import configparser
 
 
-#True if script is Main
+#Variables are used when the module is being run as a 
+#main script. 
 _main = False
 _error = ''
-_parserSet = False
+_parser = None
 _defaultConfig = os.path.join(os.path.dirname(__file__), 'config.ini')
-_currentConfig = None
-#Config file for testing. Should stay commented
-#_defaultConfig = 'testConfig.ini'
 
-#The following global variables are defined by the a config file
-#that is applied to the parser
-FILENAME_BASE = None  
-PARSED_KEYWORDS = []
-WRITTEN_KEYWORDS = []
-ENTRY_RESTRICTIONS = {}
-VERBOSE = False
-Logger  = None
-#ErrorLog= None
-CsvDump = None
+
 
 
 """
 Checks for errors in the command line for a script
 usage containing the -d flag
+Should only be called from __Main__
 """
 def checkParseDirectoriesArgs(argv):
     global _error
@@ -70,7 +60,7 @@ def checkParseDirectoriesArgs(argv):
 
 """
 Checks for errors in the arguments sent to the script
-@args argv: Arguments sent to the script.
+Should only be called from __Main__
 """
 def checkCommandLineArgs(argv):
     global _error
@@ -113,54 +103,22 @@ def checkCommandLineArgs(argv):
     return True
 
 """
-Sets up the parser module to parse the file
-@arg f: a file
-"""
-def setup(f):
-    global _error
-    try:
-        opened = open(f)
-        setup_parser(PARSED_KEYWORDS, opened)
-        return opened
-    except NonexistantKeyError as e:
-        _error = 'The selected keys cannot be parsed'
-        raise e
-    except IOError as e:
-        _error = 'The selected keys cannot be parsed'
-        raise e
-    
-
-"""
-Extracts a dictionary mapping keywords to parsed data
-@f: An open file
-@return: A list of Entries
-"""
-def getEntries(f):
-    global _error
-    try:
-        entries = parse()
-        return entries
-    except UnparseableFileError as e:
-        _error = 'No schema available to parse ' + f.name
-        raise e
-
-"""
 Appends all new entries to the designated .csv file. If file does
 not exist it is created.
 @entries: A list of entry objects
 """
-def writeCSV(entries, CSVfilename = None):
+def _writeCSV(entries, parser, CSVfilename = None):
     header = ''
     currentLines = {}
 
-    for i in range(len(WRITTEN_KEYWORDS)):
-        header += WRITTEN_KEYWORDS[i]
-        if i != (len(WRITTEN_KEYWORDS)-1):
+    for i in range(len(parser.WRITTEN_KEYWORDS)):
+        header += parser.WRITTEN_KEYWORDS[i]
+        if i != (len(parser.WRITTEN_KEYWORDS)-1):
             header += ', '
         else:
             header += '\n'
 
-    csvFile = createCSVFile(entries, CSVfilename)
+    csvFile = _createCSVFile(entries, parser, CSVfilename)
     csvFile.seek(0,0)
     for line in csvFile:
         currentLines[line] = True
@@ -170,14 +128,14 @@ def writeCSV(entries, CSVfilename = None):
     
     if entries is not None:
         for e in entries:
-            if restricted(e):
+            if restricted(e, parser):
                 continue
             i = 0
             newEntry = ''
-            for k in WRITTEN_KEYWORDS:
+            for k in parser.WRITTEN_KEYWORDS:
                 if e[k] is not None:
                     newEntry += e[k]
-                if i != (len(WRITTEN_KEYWORDS) - 1):
+                if i != (len(parser.WRITTEN_KEYWORDS) - 1):
                     newEntry += ', '
                 else:
                     newEntry += '\n'
@@ -189,19 +147,19 @@ def writeCSV(entries, CSVfilename = None):
 """
 Creates a file with the correct name for the parsed html file.
 """
-def createCSVFile(entries, CSVfilename):
-    global _error, CsvDump
+def _createCSVFile(entries, parser, CSVfilename):
+    global _error#, CsvDump
 
     filename = ''
 
-    if not os.path.isdir(CsvDump):
-        os.makedirs(CsvDump)
-    filepath = CsvDump
+    if not os.path.isdir(parser.CsvDump):
+        os.makedirs(parser.CsvDump)
+    filepath = parser.CsvDump
     
     try:
         if CSVfilename is None:
             if len(entries) > 0:
-                check = entries[0][FILENAME_BASE]
+                check = entries[0][parser.FILENAME_BASE]
                 if check is not None:
                     filename += check
                 if len(filename) > 0:
@@ -222,20 +180,20 @@ def createCSVFile(entries, CSVfilename):
 """
 Checks for any restrictions
 """
-def restricted(entry):
+def restricted(entry, parser):
     restricted = False
 
     for k in entry.keys():
         #Allowed values
-        if k in ENTRY_RESTRICTIONS.keys():
+        if k in parser.ENTRY_RESTRICTIONS.keys():
             restricted = True
-            for v in ENTRY_RESTRICTIONS[k]:
+            for v in parser.ENTRY_RESTRICTIONS[k]:
                 if entry[k] == v:
                     restricted = False
                     break
         #Restricted Values
-        if ('~' + k) in ENTRY_RESTRICTIONS.keys():
-            for v in ENTRY_RESTRICTIONS[('~' + k)]:
+        if ('~' + k) in parser.ENTRY_RESTRICTIONS.keys():
+            for v in parser.ENTRY_RESTRICTIONS[('~' + k)]:
                 if entry[k] == v:
                     restricted = True
     return restricted
@@ -283,9 +241,10 @@ Scans the arguments and looks for flags and their
 corresponding variables. Most flags are handled 
 and removed from argv. If -d is present, it will
 become the first element of argv. 
+Should only be called from __Main__()
 """
-def handleFlags(argv):
-    global _error, Logger
+def _handleFlags(argv):
+    global _error#, Logger
     
     if len(argv) < 1:
         _error = 'No command line arguments'
@@ -303,7 +262,7 @@ def handleFlags(argv):
             if v_flag:
                 _error = 'Verbose should not be set twice'
                 raise BadInputError()
-            toggle_verbose()
+            _parser.toggle_verbose()
             argv.pop(i)
             removed = True
             v_flag = True
@@ -317,7 +276,7 @@ def handleFlags(argv):
                 if not os.path.isdir(argv[i+1]):
                     _error = 'Csv dump is not a directory'
                     raise BadInputError()
-            set_csv_dump(argv[i+1])
+            _parser.set_csv_dump(argv[i+1])
             argv.pop(i)
             argv.pop(i)
             removed = True
@@ -327,12 +286,12 @@ def handleFlags(argv):
                 _error = 'Log should not be set twice'
                 raise BadInputError()
             elif i == (len(argv) - 1):
-                Logger = None
+                _parser.Logger = None
             elif argv[i+1].split('.')[len(argv[i+1].split('.'))-1] == 'txt':
-                set_logger(argv[i+1])
+                _parser.set_logger(argv[i+1])
                 argv.pop(i)
             else:
-                Logger = None
+                _parser.Logger = None
             argv.pop(i)
             removed = True
             l_flag = True
@@ -350,191 +309,50 @@ def handleFlags(argv):
             i += 1
     return argv
 
-"""
-Toggles the parser's verbose setting
-"""
-def toggle_verbose():
-    global VERBOSE
-    VERBOSE = not VERBOSE
-    
-"""
-Returns verbose status
-"""
-def is_verbose():
-    return VERBOSE
-
-"""
-Sets a .txt file to be the parser's error log
-"""
-def set_logger(logname):
-    global _error, Logger
-
-    fname = logname.split('.')
-    if len(fname) > 1:
-        t = fname[len(fname) - 1]
-        if t != 'txt':
-            _error = 'Error log should be a text file'
-            raise BadInputError()
-    Logger = logname
-
-
-"""
-Sets the given directory to be the directory that
-the parser places all parsed .csv files into.
-"""
-def set_csv_dump(directory):
-    global CsvDump
-    
-    if not os.path.isabs(directory):
-        directory = os.path.abspath(directory)
-    CsvDump = directory
-    
-"""
-Parses the files and writes them to csv files
-@argv Arguments to parse.
-"""
-def parse_and_write(htmlFile, CsvFile=None):       
-    if not _parserSet:
-        raise ParserSetError(_parserSet)
-
-    try:
-        opened = setup(htmlFile)
-        entries = getEntries(opened)
-        if entries is None:
-            clean_env()
-            return False
-        else:
-            writeCSV(entries, CsvFile)
-            clean_env()
-            return True
-        
-    except Exception as e:
-        clean_env()
-        raise e
-
 
 """
 Parses files given by the command line. Arguments are validated
 and corresponding csv files are written.
+Should only be called be __Main__
 """
-def parseCommandLine(argv):
-    global _error, CsvDump
-
+def _parseCommandLine(argv):#, parser=_parser):
+    global _error#, Csv_Dump
+    #May cause issues setting a new CSVDUmp
+    CsvDump = _parser.CsvDump
     message = ''
     checkCommandLineArgs(argv)
-    set_csv_dump(CsvDump)    
+    _parser.set_csv_dump(CsvDump)    
     
     fileTypes   = getFileTypes(argv)
     htmlfiles   = fileTypes['html']
     csvfiles    = fileTypes['csv']    
-    parse_files(htmlfiles, csvfiles)
+    _parser.parse_files(htmlfiles, csvfiles)
 
 """
 Parses all files in the directory, and places them in the
-CsvDump. 
+CsvDump.
+Should only be called by __Main__
 """
-def parseDirectories(argv):
+def _parseDirectories(argv):
 #    argv.pop(0)
     checkParseDirectoriesArgs(argv)
     directories = getFileTypes(argv)['other']
     for d in directories:
-        parse_directory(os.path.abspath(d))
+        _parser.parse_directory(os.path.abspath(d))
      
-def parse_directory(directory):
-    if not _parserSet:
-        raise ParserSetError(_parserSet)
-
-    files = os.listdir(directory)
-    htmlfiles = getFileTypes(files)['html']
-
-    i = 1
-    for f in htmlfiles:
-        try:
-            parse_and_write(os.path.join(sys.path[0], directory, f))
-            message = str(i) + ':\tParsed ' + f
-            addMessage(message)
-        except Exception as e:
-            message = str(i) + ':\tCould not parse ' + f
-            addMessage(message)
-            if len(_error) == 0:
-                raise e
-        i += 1
-
-"""
-Parses a list of htmlfiles, adding them to their corresponding
-csv file if given.
-"""
-def parse_files(htmlfiles, csvfiles=[]):
-    if not _parserSet:
-        raise ParserSetError(_parserSet)
-    i = 0
-    for f in htmlfiles:
-        try:
-            if len(csvfiles) > i:
-                parsed = parse_and_write(f, csvfiles[i])
-            else:
-                parsed = parse_and_write(f)
-            if not parsed:
-                i += 1
-                raise Exception()
-            i += 1
-            message = str(i) + ': Parsed ' + f
-            addMessage(message)
-        except Exception as e:
-            message = str(i) + ': Could not parse ' + f
-            addMessage(message)
-            if len(_error) == 0:
-                raise e
-
 """
 Adds a message to a logger and prints it to stdio
 if verbose mode is active. Newlines are added automatically.
 """
-def addMessage(message, logOnly=False):
-    if VERBOSE and _main and not logOnly:
+def addMessage(message, logOnly=False, parser=None):
+    if parser.VERBOSE and _main and not logOnly:
         print(message)
 #uses Logger
-    if Logger is not None:
-        logFile = open(Logger, 'a')
+    if parser.Logger is not None:
+        logFile = open(parser.Logger, 'a')
         logFile.write(message + '\n')
         logFile.close()
 
-"""
-Applies the settings in the config.ini file given. 
-"""
-##Make this function differentiate between a configparser ofbject and a file name,
-##if parser, set it up directly. Otherwise, do this
-def apply_config(configFile):
-    global VERBOSE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, Logger, FILENAME_BASE, VERBOSE, CsvDump, _currentConfig
-    if not _parserSet:
-        raise ParserSetError(_parserSet)
-    config = None
-    if isinstance(configFile, configparser.ConfigParser):
-        config = configFile
-    else:     
-        config = configparser.ConfigParser()
-        config.read(configFile)
-    _currentConfig = config
-    
-    PARSED_KEYWORDS = parseKeywords( config, 
-                                        'PARSED_KEYWORDS',
-                                        'parsed_keywords'
-                                      )
-    WRITTEN_KEYWORDS = parseKeywords( config,
-                                      'WRITTEN_KEYWORDS',
-                                      'WRITTEN_keywords'
-                                      )
-    ENTRY_RESTRICTIONS = parseRestrictions(config,
-                                           'ENTRY_RESTRICTIONS')
-    vTemp = parseValue(config, 'VALUES', 'VERBOSE')
-    if vTemp == "True": 
-        VERBOSE = True
-    else:
-        VERBOSE = False
-    Logger = parseValue(config, 'VALUES', 'Logger')
-    FILENAME_BASE = parseValue(config, 'VALUES', 'FILENAME_BASE')
-    CsvDump = parseValue(config, 'VALUES', 'CSV_DUMP')
-    
 def parseKeywords(config, section, key):
     keywords = []
     try:
@@ -574,88 +392,231 @@ def parseValue(config, section, key):
     else:
         return val
 
-def verifyDefaultValues():
+def verifyDefaultValues(parser):
     global _error
     
     message = ''
     try:
-        if not isinstance(PARSED_KEYWORDS, list):
+        if not isinstance(parser.PARSED_KEYWORDS, list):
             message = 'parsed_keywords not properly set'
             raise BadConfigError(message)
 
-        if not isinstance(WRITTEN_KEYWORDS, list):
+        if not isinstance(parser.WRITTEN_KEYWORDS, list):
             message = 'parsed_keywords not properly set'
             raise BadConfigError(message)
         else:
-            for w in WRITTEN_KEYWORDS:
-                if w not in PARSED_KEYWORDS:
+            for w in parser.WRITTEN_KEYWORDS:
+                if w not in parser.PARSED_KEYWORDS:
                     message = 'Value ' + w + ' is not parsed from the file'
                     raise BadConfigError(message)
-        if not isinstance(ENTRY_RESTRICTIONS, dict):
+        if not isinstance(parser.ENTRY_RESTRICTIONS, dict):
             message = 'ENTRY_RESTRICTIONS not properly set'
             raise BadConfigError(message)
-        if not isinstance(FILENAME_BASE, str):
+        if not isinstance(parser.FILENAME_BASE, str):
             message = 'FILENAME_BASE not properly set'
             raise BadConfigError(message)
-        elif FILENAME_BASE not in PARSED_KEYWORDS:
+        elif parser.FILENAME_BASE not in parser.PARSED_KEYWORDS:
             message = 'FILENAME_BASE is not parsed'
             raise BadConfigError(message)
-        if not isinstance(CsvDump, str):
+        if not isinstance(parser.CsvDump, str):
             message = 'CSV_DUMP not properly set'
             raise BadConfigError(message)
 
     except BadConfigError as e:
         _error = message
         raise e
-
 """
-Resets the state of the parser so that it can be properly
-reset by another config file.
+Returns the instance of ConfigParser that is used as the
+default configuration for this parser. 
 """
-def close_parser():
-    global FILENAME_BASE, PARSED_KEYWORDS, WRITTEN_KEYWORDS, ENTRY_RESTRICTIONS, VERBOSE, Logger, CsvDump, _error, _parserSet, _currentConfig
-
-    FILENAME_BASE = None  
-    PARSED_KEYWORDS = []
-    WRITTEN_KEYWORDS = []
-    ENTRY_RESTRICTIONS = {}
-    VERBOSE = False
-    Logger  = None
-    #ErrorLog= None
-    CsvDump = None
-#    _error = ''
-    _parserSet = False
-    _currentConfig = None
-    
-def is_set():
-    return _parserSet
-    
 def default_config():
     config = configparser.ConfigParser()
     config.read(_defaultConfig)
     return config
     
-def get_config():
-    return _currentConfig
-    
+"""
+Extracts a dictionary mapping keywords to parsed data
+@f: An open file
+@return: A list of Entries
+"""
+def get_entries(parsingPackage):
+    global _error
+    try:
+        return parse(parsingPackage)
+    except UnparseableFileError as e:
+        _error = 'No schema available to parse ' + parsingPackage.filename
+        raise e
+
+"""
+Returns the parsing package used by the fileParser module to
+parse a file.
+@parser: parser object
+@opened: Opened file header
+"""
+def get_parsingPackage(parser, opened):        
+    return make_parsingPackage(parser.PARSED_KEYWORDS, opened)
+      
 """
 A parser object. Gives user access to the public functions in 
 this module
 """
 class Parser():
     def __init__(self, config=_defaultConfig):
-        global _parserSet
+        self._currentConfig = None
+        self.FILENAME_BASE = None  
+        self.PARSED_KEYWORDS = []
+        self.WRITTEN_KEYWORDS = []
+        self.ENTRY_RESTRICTIONS = {}
+        self.VERBOSE = False
+        self.Logger  = None
+        #ErrorLog= None
+        self.CsvDump = None
+        self.parsingPackage = None
 		
-        if _parserSet:
-            raise ParserSetError(_parserSet)
         try:
-            _parserSet = True
-            apply_config(config)
-            verifyDefaultValues()
+            self.apply_config(config)
+            verifyDefaultValues(parser=self)
             
         except Exception as e:
-            close_parser()
+            self.close_parser()
             raise e
+            
+    def __setup__(self, f):
+        global _error
+        try:
+            self.parsingPackage = get_parsingPackage(self, open(f))
+        except NonexistantKeyError as e:
+            _error = 'The selected keys cannot be parsed'
+            raise e
+        except IOError as e:
+            _error = 'The selected keys cannot be parsed'
+            raise e
+    
+    def close_parser(self):
+        self.FILENAME_BASE = None  
+        self.PARSED_KEYWORDS = []
+        self.WRITTEN_KEYWORDS = []
+        self.ENTRY_RESTRICTIONS = {}
+        self.VERBOSE = False
+        self.Logger  = None
+        #self.ErrorLog= None
+        self.CsvDump = None
+        self._currentConfig = None
+        self.parsingPackage = None
+
+    def set_logger(self, logname):
+        global _error
+
+        fname = logname.split('.')
+        if len(fname) > 1:
+            t = fname[len(fname) - 1]
+            if t != 'txt':
+                _error = 'Error log should be a text file'
+                raise BadInputError()
+        self.Logger = logname
+
+    def apply_config(self, configFile):
+        config = None
+        if isinstance(configFile, configparser.ConfigParser):
+            config = configFile
+        else:     
+            config = configparser.ConfigParser()
+            config.read(configFile)
+        self._currentConfig = config
+        
+        self.PARSED_KEYWORDS = parseKeywords(config, 
+                                            'PARSED_KEYWORDS',
+                                            'parsed_keywords'
+                                          )
+        self.WRITTEN_KEYWORDS = parseKeywords(config,
+                                          'WRITTEN_KEYWORDS',
+                                          'WRITTEN_keywords'
+                                          )
+        self.ENTRY_RESTRICTIONS = parseRestrictions(config,
+                                         'ENTRY_RESTRICTIONS')
+        vTemp = parseValue(config, 'VALUES', 'VERBOSE')
+        if vTemp == "True": 
+            self.VERBOSE = True
+        else:
+            self.VERBOSE = False
+        self.Logger = parseValue(config, 'VALUES', 'Logger')
+        self.FILENAME_BASE = parseValue(config, 'VALUES', 'FILENAME_BASE')
+        self.CsvDump = parseValue(config, 'VALUES', 'CSV_DUMP')
+        
+    def parse_files(self, htmlfiles, csvfiles=[]):
+        i = 0
+        for f in htmlfiles:
+            try:
+                if len(csvfiles) > i:
+                    parsed = self.parse_and_write(f, csvfiles[i])
+                else:
+                    parsed = self.parse_and_write(f)
+                if not parsed:
+                    i += 1
+                    raise Exception()
+                i += 1
+                message = str(i) + ': Parsed ' + f
+                addMessage(message, parser=self)
+            except Exception as e:
+                message = str(i) + ': Could not parse ' + f
+                addMessage(message, parser=self)
+                if len(_error) == 0:
+                    raise e
+
+    def parse_and_write(self, htmlFile, CsvFile=None):       
+        try:
+            self.__setup__(htmlFile)
+            entries = get_entries(self.parsingPackage)
+            if entries is None:
+                #Won't need this
+#                clean_env()
+                return False
+            else:
+                _writeCSV(entries, self, CSVfilename=CsvFile)
+                #Won't need this
+#                clean_env()
+                return True
+            
+        except Exception as e:
+            #won't need this anymore
+#            clean_env()
+            raise e
+            
+    def parse_directory(self, directory):
+        files = os.listdir(directory)
+        htmlfiles = getFileTypes(files)['html']
+
+        i = 1
+        for f in htmlfiles:
+            try:
+                self.parse_and_write(os.path.join(sys.path[0], directory, f))
+                message = str(i) + ':\tParsed ' + f
+                addMessage(message, parser=self)
+            except Exception as e:
+                message = str(i) + ':\tCould not parse ' + f
+                addMessage(message, parser=self)
+                if len(_error) == 0:
+                    raise e
+            i += 1
+    
+    def set_csv_dump(self, directory):        
+        if not os.path.isabs(directory):
+            directory = os.path.abspath(directory)
+        self.CsvDump = directory
+        
+    def toggle_verbose(self):
+        self.VERBOSE = not self.VERBOSE
+    
+    def is_verbose(self):
+        return self.VERBOSE
+        
+    def get_config(self):
+        return self._currentConfig    
+        
+    def is_set(self):
+        return self._parserSet
+        
+"""
         self.close_parser   = close_parser
         self.set_logger     = set_logger
         self.apply_config   = apply_config
@@ -666,7 +627,7 @@ class Parser():
         self.is_set         = is_set
         self.get_config     = get_config
         self.is_verbose     = is_verbose
-
+"""
 
 """
 Main function. Only run when script is run as main program.
@@ -674,23 +635,25 @@ Main handles errors that script is designed to catch,
 it allows all others to pass.
 """
 def __main__():
+    global _parser
+
     try:
-        parser = Parser(os.path.abspath(os.path.join(sys.path[0],'config.ini')))
+        _parser = Parser(os.path.abspath(os.path.join(sys.path[0],'config.ini')))
         argv = sys.argv
         argv.pop(0)
   
-        argv = handleFlags(argv)
+        argv = _handleFlags(argv)
         message = ''   
         for i in range(25):
             message += '_'
         message += '\nNew entries added ' + str(datetime.datetime.now())
-        addMessage(message, logOnly=True)
+        addMessage(message, logOnly=True, parser=_parser)
 
         if argv[0] == '-d':
             argv.pop(0)
-            parseDirectories(argv)
+            _parseDirectories(argv)
         else:
-            parseCommandLine(argv)
+            _parseCommandLine(argv)
     except Exception as e:
         if len(_error) > 0:
             sys.stderr.write("Usage: " + _error + "\n")
@@ -699,15 +662,6 @@ def __main__():
             raise e
 
 #Custom Exception raised for bad input
-class ParserSetError(Exception):
-    def __init__(self, val):
-        super()
-        self.val = val
-    def __repr__(cls):
-        if cls.val:
-            return 'Parser is already set\n'
-        else:
-            return 'Parser has not been set\n'
 class BadInputError(Exception):
     pass
 class BadConfigError(Exception):
